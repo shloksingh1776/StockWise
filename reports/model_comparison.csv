@@ -1,0 +1,6 @@
+Model,Type,Validation MAE,Validation RMSE,Validation R2,Negative Preds,Min Pred,Max Pred,Fit Time (s),Inference Time (s)
+Ridge Regression,ml,7.1288,9.2449,0.9272,0,4.2956,184.7264,2.22,0.06
+Linear Regression,ml,7.1295,9.245,0.9272,0,4.3035,184.7311,2.63,0.05
+Lasso Regression,ml,7.3785,9.5815,0.9218,0,9.7298,192.2916,8.18,0.05
+Elastic Net Regression,ml,7.4817,9.7139,0.9197,0,10.9435,191.7188,7.73,0.06
+Weekly Seasonal Naive,baseline,9.3519,12.1765,0.8738,0,6.0,231.0,0.0,0.0
