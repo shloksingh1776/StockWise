@@ -2,6 +2,7 @@
 
 Milestone 1: Data Foundation and Exploratory Analysis.
 Milestone 2: Demand Forecasting Engine.
+Milestone 3: Inventory Intelligence.
 """
 
 from stockwise.data_loader import (
@@ -33,6 +34,18 @@ from stockwise.forecasting import (
     plot_residuals_analysis,
     split_chronological_data,
 )
+from stockwise.inventory import (
+    InventoryPolicyError,
+    InventoryPosition,
+    ReplenishmentPolicy,
+    ReplenishmentRecommendation,
+    calculate_lead_time_demand,
+    calculate_reorder_point,
+    calculate_safety_stock,
+    calculate_sku_residual_variability,
+    evaluate_replenishment_scenario,
+    summarize_demand_and_risk,
+)
 
 __all__ = [
     # Milestone 1: Data Loader
@@ -62,4 +75,15 @@ __all__ = [
     "DEFAULT_VAL_END",
     "DEFAULT_TEST_START",
     "DEFAULT_TEST_END",
+    # Milestone 3: Inventory Intelligence
+    "InventoryPolicyError",
+    "ReplenishmentPolicy",
+    "InventoryPosition",
+    "ReplenishmentRecommendation",
+    "calculate_lead_time_demand",
+    "calculate_safety_stock",
+    "calculate_reorder_point",
+    "evaluate_replenishment_scenario",
+    "summarize_demand_and_risk",
+    "calculate_sku_residual_variability",
 ]

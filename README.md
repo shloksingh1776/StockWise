@@ -5,6 +5,31 @@ StockWise is an AI-driven inventory optimization and demand intelligence platfor
 This repository tracks the project's milestones:
 * **Milestone 1:** Data Foundation and Exploratory Analysis (Completed)
 * **Milestone 2:** Demand Forecasting Engine (Completed)
+* **Milestone 3:** Inventory Intelligence and Replenishment Optimization (Completed)
+
+---
+
+## Milestone 3: Inventory Intelligence
+
+### Objectives & Deliverables
+* **Reusable Inventory Intelligence Module (`src/stockwise/inventory.py`):**
+  * **Demand Velocity & Volatility Summaries:** Aggregates empirical daily mean sales ($\bar{d}$), daily sales standard deviation ($\sigma_D$), and coefficient of variation ($CV$) by store-item pair.
+  * **Demand-Based Risk Segmentation:** Ranks SKUs using an empirical percentile score ($0.5 \cdot p_{vel} + 0.5 \cdot p_{vol}$) into four operational quadrants:
+    1. *Quadrant I (High Velocity - Volatile):* 238 SKUs with high volume and high volatility designated as **CRITICAL** priority.
+    2. *Quadrant II (High Velocity - Stable):* 12 steady fast-movers with **ELEVATED** revenue impact and low safety buffer requirements.
+    3. *Quadrant III (Low Velocity - Stable):* 238 predictable baseline items with **STANDARD** maintenance.
+    4. *Quadrant IV (Lumpy / Erratic Demand):* 12 slow-movers with intermittent demand spikes.
+    *(Note: Demand risk scores are transparent prioritization heuristics, strictly not calibrated stockout probabilities).*
+  * **Dual Safety-Stock Framework:**
+    * *Historical Sales Standard Deviation (Default):* $SS_{hist} = Z \cdot \sigma_D \cdot \sqrt{L}$
+    * *Forecast Error Variability (RMSE):* $SS_{model} = Z \cdot \text{RMSE}_{s,i} \cdot \sqrt{L}$ (computed on out-of-sample validation residuals, yielding 15%–39% buffer reductions under theoretical normal-error assumptions).
+    * *Stochastic Lead Time Support:* $SS = Z \cdot \sqrt{L \sigma_D^2 + \bar{d}^2 \sigma_L^2}$ when supplier delivery variance $\sigma_L > 0$.
+  * **Replenishment Policy Engine:** Continuous-review $(s, S)$ order calculator evaluating net inventory position ($IP = \text{On-Hand} + \text{On-Order} - \text{Backorders}$), Reorder Point ($ROP = d_L + SS$), Order-Up-To Level ($OUTL$), and Minimum Order Quantity ($MOQ$) batch rounding.
+  * **Structured Decision Explainability:** Returns an audit trail with inputs used, output meaning, mathematical formulas, underlying assumptions, missing operational data, and recommended manager actions.
+* **Automated Unit Tests (`tests/test_inventory.py`):**
+  * 21 focused unit tests (44 total tests across the project) verifying lead-time demand calculations, defensive negative prediction clipping, deterministic/stochastic safety stock formulas, boundary rejections, MOQ rounding, quadrant assignments, rank ties, SKU residual metrics, and negative net inventory position handling.
+* **Pipeline Execution & Reporting Engine (`src/stockwise/run_inventory.py`):**
+  * Evaluates demand segmentation across all 500 store-item series, calculates out-of-sample validation error metrics, evaluates 72 policy scenarios across representative SKUs, and exports artifacts to `reports/`.
 
 ---
 
@@ -27,7 +52,7 @@ This repository tracks the project's milestones:
     4. *Lasso Regression (L1):* Sparse regression ($\alpha = 0.1$) enforcing feature sparsity.
     5. *Elastic Net Regression:* Joint L1/L2 penalty ($\alpha = 0.1, l_1 = 0.5$).
 * **Automated Unit Tests (`tests/test_forecasting.py`):**
-  * 10 focused unit tests (22 total tests across the project) verifying lag correctness, target leakage prevention via synthetic mutations, chronological boundary non-overlap, initial history drops, baseline mechanics, and metric formula accuracy.
+  * 11 focused unit tests verifying lag correctness, target leakage prevention via synthetic mutations, chronological boundary non-overlap, initial history drops, baseline mechanics, and metric formula accuracy.
 * **Pipeline Execution & Reporting Engine (`src/stockwise/run_forecasting.py`):**
   * CLI runner executing the end-to-end pipeline, selecting the top model on validation data, evaluating on untouched test data, and generating figures and reports in `reports/`.
 
@@ -62,11 +87,10 @@ Ridge Regression was selected based on validation performance and evaluated on t
 3. **Negative Demand Predictions:**
    * Validation set (summer peak): **0** negative predictions across all models.
    * Test set (winter trough): **35 out of 46,000 predictions (0.076%)** yielded slightly negative values (down to -4.30 units) due to unconstrained linear extrapolation on low-volume SKUs.
-   * *Production Recommendation:* Raw predictions are evaluated without modification for research transparency. In replenishment production pipelines, a non-negative clipping safeguard (`np.clip(preds, 0, None)`) should be applied before ordering inventory.
-4. **Residual Diagnostics & Variance Structure:**
-   * Residual errors are centered near zero (mean: -0.17 units), but display a leptokurtic distribution with positive excess kurtosis (+0.97, heavier tails than a standard normal distribution).
-   * Residual variance displays clear **heteroscedasticity**: standard deviation of errors scales from 6.10 units in the lowest fitted-value quartile to 7.57, 9.53, and 12.37 units in the highest quartile (a ~4.1× increase in variance).
-   * In retail demand forecasting, error dispersion naturally scales with expected sales volume; this behavior is typical for count/demand data, does not invalidate the linear model, and leaves the reported predictive metrics unchanged (Validation MAE 7.1288, Test MAE 6.7529).
+   * *Production Safeguard:* In `src/stockwise/inventory.py`, a defensive floor (`np.maximum(0.0, preds)`) is applied before replenishment sizing to ensure negative orders can never occur.
+4. **Residual Diagnostics & Heteroscedasticity:**
+   * Residual errors display clear **heteroscedasticity**: error standard deviation scales from 6.10 units in the lowest fitted quartile to 12.37 units in the highest quartile.
+   * Sizing safety stock using SKU-specific dispersion ($\text{RMSE}_{s,i}$) accurately reflects volume-dependent error variance rather than applying a single uniform buffer.
 
 ---
 
@@ -94,20 +118,26 @@ stockwise/
 ├── notebooks/
 │   └── 01_exploratory_data_analysis.ipynb  # Executed EDA notebook
 ├── reports/                  # Generated figures and reports
-│   ├── actual_vs_predicted.png    # Time-series & scatter plot diagnostics
-│   ├── milestone_2_report.md      # Comprehensive Milestone 2 markdown report
-│   ├── model_comparison.csv       # Tabular validation comparison metrics
-│   ├── model_comparison.png       # Comparative MAE and RMSE bar charts
-│   └── residuals_analysis.png     # Error distribution & residual diagnostics
+│   ├── actual_vs_predicted.png              # Time-series & scatter plot diagnostics
+│   ├── demand_risk_matrix.png               # Demand velocity vs. volatility scatter
+│   ├── inventory_replenishment_scenarios.csv# Evaluated replenishment scenarios
+│   ├── milestone_2_report.md                # Milestone 2 forecasting report
+│   ├── milestone_3_inventory_report.md      # Milestone 3 inventory intelligence report
+│   ├── model_comparison.csv                 # Tabular validation comparison metrics
+│   ├── model_comparison.png                 # Comparative MAE and RMSE bar charts
+│   └── residuals_analysis.png               # Error distribution & residual diagnostics
 ├── src/
 │   └── stockwise/
-│       ├── __init__.py            # Package entry point exposing loader & forecaster
+│       ├── __init__.py            # Package entry point exposing loader, forecaster & inventory
 │       ├── data_loader.py         # Data ingestion, schema validation & quality metrics
 │       ├── forecasting.py         # Feature engineering, chronological splits, pipelines
-│       └── run_forecasting.py     # End-to-end forecasting pipeline runner
+│       ├── inventory.py           # Inventory policies, safety stock, ROP, risk scoring
+│       ├── run_forecasting.py     # End-to-end forecasting pipeline runner
+│       └── run_inventory.py       # End-to-end inventory scenario runner
 ├── tests/
 │   ├── test_data_loader.py   # Pytest suite for data loader (12 tests)
-│   └── test_forecasting.py   # Pytest suite for forecasting engine (10 tests)
+│   ├── test_forecasting.py   # Pytest suite for forecasting engine (11 tests)
+│   └── test_inventory.py     # Pytest suite for inventory intelligence (21 tests)
 ├── .gitignore                # Protects .venv, local data, and secrets
 ├── pytest.ini                # Pytest configuration (pythonpath = src)
 ├── requirements.txt          # Pinned project dependencies
@@ -132,7 +162,7 @@ source .venv/bin/activate
 ```
 
 ### 2. Dependencies
-All required dependencies (`pandas`, `numpy`, `scikit-learn`, `matplotlib`, `seaborn`, `pytest`, `jupyter`, etc.) are recorded in `requirements.txt`.
+All required dependencies (`pandas`, `numpy`, `scikit-learn`, `scipy`, `matplotlib`, `seaborn`, `pytest`, `jupyter`, etc.) are recorded in `requirements.txt`.
 To install dependencies into an active environment:
 ```powershell
 pip install -r requirements.txt
@@ -159,7 +189,7 @@ data/raw/train.csv
 
 ## Running Automated Tests
 
-Run the complete 22-test suite using `pytest`:
+Run the complete 44-test suite using `pytest`:
 
 ```powershell
 # Run all tests
@@ -169,14 +199,13 @@ pytest
 pytest -v
 ```
 
-All 22 unit tests run in ~3–4 seconds using synthetic in-memory fixtures.
+All 44 unit tests run in ~6–7 seconds using synthetic in-memory fixtures.
 
 ---
 
-## Executing the Demand Forecasting Pipeline
+## Executing Pipelines
 
-Run the end-to-end forecasting pipeline directly on the full dataset:
-
+### 1. Demand Forecasting Pipeline (Milestone 2)
 ```powershell
 # Directly from project root (Windows)
 .\.venv\Scripts\python.exe src/stockwise/run_forecasting.py
@@ -185,10 +214,20 @@ Run the end-to-end forecasting pipeline directly on the full dataset:
 python src/stockwise/run_forecasting.py
 ```
 
-This command executes feature engineering across all 913,000 rows, trains and evaluates all 5 models, selects the best model, evaluates the test set, and updates all artifacts in `reports/` in under 30 seconds.
+### 2. Inventory Intelligence Pipeline (Milestone 3)
+```powershell
+# Directly from project root (Windows)
+.\.venv\Scripts\python.exe src/stockwise/run_inventory.py
+
+# Or on macOS / Linux
+python src/stockwise/run_inventory.py
+```
+This generates `reports/demand_risk_matrix.png`, `reports/inventory_replenishment_scenarios.csv`, and `reports/milestone_3_inventory_report.md` in ~10 seconds.
 
 ---
 
-## Limitations and Future Work
-1. **Unconstrained Linear Predictions:** Linear models can predict negative values for extreme low-demand SKUs during off-peak seasons (35 test instances observed). Tree-based ensembles (LightGBM/XGBoost) or Poisson/Tweedie GLMs handle non-negative demand natively.
-2. **1-Day-Ahead Assumption:** The pipeline models 1-day-ahead rolling forecasts with daily refreshed observations. Multi-step recursive or direct forecasting horizons (e.g., 14-day or 30-day replenishment windows) will be explored in subsequent milestones.
+## Methodological Integrity & Dataset Limitations
+1. **Historical Sales Limitation:** The dataset contains transaction sales, not inventory records. Current stock balances, lead times, purchase orders, and holding costs used in scenario analyses are explicitly parameterized user inputs.
+2. **1-Day-Ahead Assumption:** The pipeline models 1-day-ahead rolling forecasts with daily refreshed observations. For lead times $L > 1$, lead-time demand is approximated assuming constant daily demand rate ($L \times \max(0, \hat{y}_{t+1})$). Multi-step direct and recursive horizons will be explored in future milestones.
+3. **Preservation of Untouched Test Set:** Model-driven safety stock metrics ($\text{RMSE}_{s,i}$) are calculated exclusively on out-of-sample validation residuals (Q3 2017). The Q4 2017 test set was preserved untouched as a pure holdout evaluation.
+4. **Theoretical Normal-Error Assumptions & Nominal Service Levels:** Safety-stock reductions (15%–39%) are calculated under theoretical standard normal error assumptions. Nominal cycle service levels (e.g., 95%) have not been empirically validated through discrete-event inventory simulation. Because residuals display heteroscedasticity and heavy tails (+0.97 excess kurtosis), realized cycle service levels may differ from nominal targets. No specific realized service level is claimed.
